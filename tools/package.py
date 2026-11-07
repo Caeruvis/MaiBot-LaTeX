@@ -32,7 +32,8 @@ def main():
             if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"
         )
     paths = sorted(paths)
-    archive = output / "maibot-latex-0.1.0.zip"
+    version = json.loads((ROOT / "_manifest.json").read_text())["version"]
+    archive = output / f"maibot-latex-{version}.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for path in paths:
             z.write(path, "caeruvis_latex/" + path.relative_to(ROOT).as_posix())

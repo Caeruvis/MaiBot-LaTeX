@@ -2,6 +2,8 @@
 
 **MaiBot LaTeX** 使用 **TeX Live / XeLaTeX**，把含公式的整段回复连同说明文字渲染成 **一张 PNG**。不含公式的回复照常发送。目标宿主为 **MaiBot 1.3.19**，插件 SDK 为 **2.21.0**。
 
+作者：**Caeruvis** 。版本：**0.1.1** 。
+
 ## 使用方式
 
 | 入口 | 输入 | 输出 |
@@ -25,7 +27,7 @@
 
    安装好依赖后可离线渲染。解压插件后，将 `caeruvis_latex` 放进实例的 `plugins` 目录。
 
-2. 在 `_manifest.json` 中填写实际的 `author.url` 和 `urls.repository`，确认插件能通过宿主校验。确认宿主和 SDK 版本，停止机器人并备份 `src/maisaka/builtin_tool/reply.py` 与 `src/services/send_service.py`。
+2. 核对 `_manifest.json` 中的 `author.url` 和 `urls.repository`，确认插件能通过宿主校验。确认宿主和 SDK 版本，停止机器人并备份 `src/maisaka/builtin_tool/reply.py` 与 `src/services/send_service.py`。
 3. 在 **Host 源码根目录** 检查并应用配套补丁。它让回复与发送流程在缺少有效保护回执时停止，避免失败时漏发公式源码。原文件哈希记录在 [host-source-hashes.json](docs/host-source-hashes.json)。
 
    ```sh
@@ -53,3 +55,7 @@ python tools/package.py
 ```
 
 `render_smoke.py` 使用与插件相同的本机隔离编译路径。宿主接口核对见 [INTERFACES.md](docs/INTERFACES.md)。
+
+## License
+
+MIT © 2026 Caeruvis
