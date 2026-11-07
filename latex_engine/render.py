@@ -1,16 +1,15 @@
-"""在无宿主挂载、无网络的临时 TeX Live 容器中生成 PNG。"""
+"""在本机隔离环境中调用 TeX Live 和 Poppler 生成 PNG。"""
 
 import asyncio
 import base64
 import hashlib
 import struct
 import time
-import uuid
 from collections import OrderedDict
-from contextlib import suppress
 
 from .config import RenderConfig
 from .parser import MAX_TEXT
+from .texlive import compile_png
 
 MAX_IMAGE_BYTES = 2_000_000
 MAX_CACHE_BYTES = 24_000_000
@@ -78,73 +77,13 @@ class Renderer:
         )
 
     async def _compile(self, document: bytes, width: int, height: int) -> bytes:
-        name = "maibot-latex-" + uuid.uuid4().hex
-        process = await asyncio.create_subprocess_exec(
-            "docker",
-            "run",
-            "--rm",
-            "--pull=never",
-            "--name",
-            name,
-            "--network=none",
-            "--read-only",
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--user=65534:65534",
-            "--memory=512m",
-            "--memory-swap=512m",
-            "--cpus=1",
-            "--pids-limit=32",
-            "--log-driver=none",
-            "--tmpfs=/work:rw,nosuid,nodev,noexec,size=64m,mode=1777",
-            "-i",
-            self.config.docker_image,
-            str(round(96 * self.config.scale)),
-            str(width),
-            str(height),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
+        return await compile_png(
+            document,
+            round(96 * self.config.scale),
+            width,
+            height,
+            MAX_IMAGE_BYTES,
         )
-        try:
-            process.stdin.write(document)
-            await process.stdin.drain()
-            process.stdin.close()
-            try:
-                await process.stdout.readexactly(MAX_IMAGE_BYTES + 1)
-                return b""  # 超过限制，终止容器以免继续产生输出。
-            except asyncio.IncompleteReadError as exc:
-                image = exc.partial
-            return image if await process.wait() == 0 else b""
-        finally:
-            if process.returncode is None:
-                with suppress(ProcessLookupError):
-                    process.kill()
-                process.stdin.close()
-                # 关闭 Docker 客户端不会保证停止容器，按本次生成的名称清理。
-                with suppress(OSError, TimeoutError):
-                    async with asyncio.timeout(1):
-                        cleanup = await asyncio.create_subprocess_exec(
-                            "docker",
-                            "rm",
-                            "-f",
-                            name,
-                            stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL,
-                        )
-                        try:
-                            await cleanup.wait()
-                        finally:
-                            if cleanup.returncode is None:
-                                with suppress(ProcessLookupError):
-                                    cleanup.kill()
-                                await cleanup.wait()
-                # 回收 Docker 客户端，避免读取上限触发时遗留已关闭的管道。
-                with suppress(OSError, TimeoutError):
-                    async with asyncio.timeout(1):
-                        while await process.stdout.read(65536):
-                            pass
-                        await process.wait()
 
     async def render_body(self, source: str, *, full_document: bool = False) -> str | None:
         if not source.strip():

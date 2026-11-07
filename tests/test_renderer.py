@@ -1,9 +1,12 @@
 import asyncio
 import base64
 import struct
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from latex_engine import render, texlive
 from latex_engine.config import RenderConfig
 from latex_engine.render import Renderer, text_to_latex
 
@@ -86,51 +89,25 @@ async def test_cancellation_propagates(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_missing_docker_and_invalid_unicode_fail_safely(monkeypatch):
+async def test_missing_native_dependencies_and_invalid_unicode_fail_safely(monkeypatch):
     renderer = Renderer(RenderConfig())
 
     async def unavailable(*args, **kwargs):
-        raise FileNotFoundError("docker")
+        raise FileNotFoundError("xelatex")
 
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", unavailable)
+    monkeypatch.setattr(render, "compile_png", unavailable)
     assert await renderer.render_body("x") is None
     assert await renderer.render_body(chr(0xD800)) is None
 
 
-@pytest.mark.asyncio
-async def test_docker_run_is_isolated_and_does_not_pull(monkeypatch):
-    renderer = Renderer(RenderConfig())
-    writes = []
-
-    class Process:
-        returncode = 0
-
-        class stdin:
-            write = writes.append
-
-            @staticmethod
-            async def drain():
-                pass
-
-            @staticmethod
-            def close():
-                pass
-
-        class stdout:
-            @staticmethod
-            async def readexactly(size):
-                raise asyncio.IncompleteReadError(PNG, size)
-
-        async def wait(self):
-            return self.returncode
-
-    async def start(*args, **kwargs):
-        assert args[:2] == ("docker", "run")
-        assert {"--network=none", "--read-only", "--cap-drop=ALL", "--pull=never"} <= set(args)
-        assert not any(arg.startswith(("-v", "--volume", "--mount")) for arg in args[2:])
-        assert "formula" not in " ".join(args)
-        return Process()
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", start)
-    assert await renderer._compile(b"formula", 3200, 2400) == PNG
-    assert writes == [b"formula"]
+def test_linux_worker_uses_local_tools_and_isolated_workspace(monkeypatch, tmp_path):
+    monkeypatch.setattr(texlive, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(texlive, "_executable", lambda name, search: Path("/usr/bin") / name)
+    job = texlive._Job(tmp_path)
+    args = job._sandbox(job.xetex)
+    assert args[0] == "/usr/bin/bwrap"
+    assert "--unshare-all" in args and "--die-with-parent" in args
+    assert args[args.index("--bind") + 1 : args.index("--bind") + 3] == [str(tmp_path), "/work"]
+    assert args.count("--bind") == 1
+    assert job.env["openin_any"] == job.env["openout_any"] == "p"
+    assert job.env["TEXMFHOME"] == "/work/texmf-home"

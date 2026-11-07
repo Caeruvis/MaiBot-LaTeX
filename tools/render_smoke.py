@@ -1,4 +1,4 @@
-"""用本地 TeX Live 容器验证公式、整段回复和 TikZ 渲染。"""
+"""用本机离线 TeX Live验证公式、整段回复和 TikZ 渲染。"""
 
 import argparse
 import asyncio
@@ -15,7 +15,7 @@ from latex_engine.render import Renderer
 
 
 async def run(args):
-    renderer = Renderer(RenderConfig(docker_image=args.image, timeout_seconds=10))
+    renderer = Renderer(RenderConfig(timeout_seconds=10))
     engine = Engine(renderer)
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -26,7 +26,7 @@ async def run(args):
     ):
         token = await engine.tool(source, format, "smoke")
         if not token:
-            raise SystemExit(f"{name} 渲染失败，请检查 Docker 服务和本地镜像。")
+            raise SystemExit(f"{name} 渲染失败，请检查 本机 TeX Live、Poppler 和系统隔离环境。")
         segments = await engine.transform([{"type": "text", "data": token}], "smoke")
         path = args.output / f"{name}.png"
         path.write_bytes(base64.b64decode(segments[0]["binary_data_base64"], validate=True))
@@ -35,6 +35,5 @@ async def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image", default=RenderConfig().docker_image)
     parser.add_argument("--output", type=Path, default=ROOT / "outputs/render")
     asyncio.run(run(parser.parse_args()))

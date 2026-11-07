@@ -4,7 +4,6 @@ config_version = "0.1.0"
 auto_render = true
 
 [render]
-docker_image = "maibot-latex-texlive:local"
 font_size = 28
 foreground = "#18202b"
 background = "#ffffff"

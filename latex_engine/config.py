@@ -11,11 +11,6 @@ class GeneralConfig(PluginConfigBase):
 
 
 class RenderConfig(PluginConfigBase):
-    docker_image: str = Field(
-        default="maibot-latex-texlive:local",
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9._/@:-]*$",
-        description="已构建的本地 TeX Live 渲染镜像",
-    )
     font_size: int = Field(default=28, ge=12, le=64, description="公式字号（像素）")
     foreground: str = Field(default="#18202b", pattern=r"^#[0-9a-fA-F]{6}$", description="公式颜色")
     background: str = Field(default="#ffffff", pattern=r"^#[0-9a-fA-F]{6}$", description="背景颜色")

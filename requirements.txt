@@ -1,2 +1,2 @@
-# 插件运行于 Host 管理的 Runner；渲染由本地 TeX Live 容器执行。
+# 插件运行于 Host 管理的 Runner；渲染由本机隔离的 TeX Live 和 Poppler 执行。
 maibot-plugin-sdk==2.21.0
