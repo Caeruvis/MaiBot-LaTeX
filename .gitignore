@@ -16,6 +16,3 @@ __pycache__/
 !/.env.example
 /work/
 /outputs/
-
-# 项目排除路径
-/vendor/katex/dist/
