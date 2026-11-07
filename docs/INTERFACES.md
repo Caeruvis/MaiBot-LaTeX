@@ -14,9 +14,9 @@
 | `send_service.before_send` | `src/services/send_service.py:112`、`:872` | 在调用 Platform IO 之前改写消息，允许 abort，调用方检查 aborted 并停止发送 |
 | 异常策略 | `src/plugin_runtime/host/hook_dispatcher.py:407`、`:599` | 异常和超时进入错误策略；禁止 abort 的钩子会把 abort 策略按 skip 处理；熔断可跳过执行 |
 | 消息序列协议 | `src/plugin_runtime/host/message_utils.py:87`、`:243`、`:415` | 文本为 type=text/data；图片可带 binary_data_base64；SessionMessage 使用 raw_message 列表 |
+| 模型工具 | SDK `maibot_sdk/components.py`；Host `src/plugin_runtime/component_query.py:721`、`:793` | `Tool` 元数据提供模型参数，Host 转发调用并补充会话字段，结构化结果返回模型 |
 | 命令发送 | SDK `maibot_sdk/capabilities/send.py`；Host `src/plugin_runtime/capabilities/core.py:569` | send.hybrid 经 Host 规范化后调用发送服务；return_details 可取得 sent/message_id |
 | 命令拦截 | `src/chat/message_receive/bot.py:280`、`:350` | 命令先于普通聊天处理；返回三元组第三项是消息拦截等级，非零停止后续处理 |
-| 浏览器渲染 | SDK `maibot_sdk/capabilities/render.py`；Host `src/services/html_render_service.py:751` | render.html2png 支持 selector、viewport、倍像素、超时及 allow_network=False |
 | 本地声明校验 | `src/plugin_runtime/runner/manifest_validator.py:205`、`:250`、`:624` | 原版要求作者主页、仓库为非空 HTTP(S) URL，版本号为三段式 |
 
 行号对应补丁应用前的本地源码。源文件内容及版本的摘要记录在 JSON 中，补丁另附原文件哈希。
@@ -25,13 +25,11 @@
 
 ## 实现选择与理由
 
-**完整回复保护 → 跳过清洗/拆分 → 发送前渲染替换 → 原宿主发送。** 前置钩子为 late，先让同阶段普通处理器完成，再把公式替换为随机、绑定会话的临时标记；公式明文只保留在插件内存中。发送钩子把标记换成图片，并处理该消息内尚未处理的文本公式。相邻文本段先合并，公式和其他消息段的相对顺序不变。
+**完整回复 → 会话标记 → TeX Live 渲染 → 原宿主发送。** 前置钩子把含公式的完整回复换成绑定会话的标记，阻止拆分和清洗。发送钩子用一张 PNG 替换标记，并校验改写后的消息。普通说明文字和公式在同一页排版。
 
-本插件没有注册模型工具或 ReplyExtension。官方 ReplyExtension 仅在模型选中对应 plugin_options 时执行，无法单独提供“自动处理所有回复”的保证。手动入口使用所有用户可触发的 Command。（依据：SDK 装饰器和 Host reply 扩展代码。）
+模型可用 `render_latex_reply` 预渲染整段回复，然后通过正常回复输出 `image_token`。工具本身只生成图片和标记，实际投递仍由当前会话的发送钩子执行。钩子用真实发送会话查找标记。宿主可能把调用参数和会话字段放进同一字典，因此工具不会使用调用参数直接选择投递目标。
 
-渲染后端选择 **KaTeX 0.16.22** ，与 Host 浏览器能力组合生成 PNG。资源及字体离线内嵌，输入通过 JSON 数据传入；throwOnError 开启，strict 和 trust 回调直接拒绝不支持的行为，避免错误源码以红字渲染。独立调用使用独立宏对象；宏展开次数受限。超尺寸按失败处理；数学尺寸不通过 maxSize 静默裁减。渲染脚本失败返回一像素空图，Python 将其识别为失败并改为安全提示。（来源：[KaTeX 官方选项说明](https://katex.org/docs/options.html)、[支持函数](https://katex.org/docs/supported.html)。）
-
-图片内容不包含 LaTeX 注释、调试信息或源码附件。缓存仅内存存储，插件自身不打印公式和渲染异常；Host 自己的模型请求历史和诊断日志可能保留模型原回复，本任务的保证边界是聊天平台出站内容。
+渲染后端为本地容器中的 **XeLaTeX + Poppler**。普通文字先转义，公式在禁用 shell escape 的环境中编译。容器无网络和宿主目录挂载。临时文件在容器退出时销毁。渲染失败只返回短提示。Host 的模型历史仍可能包含模型生成的原文，本插件保护的是平台出站消息。
 
 ## 宿主补丁为何必要
 
@@ -48,6 +46,6 @@
 - 覆盖核实的 Maisaka 完整回复链路、经过 send_service 的文本消息及直接命令。绕过该发送服务的第三方网关直发不受保护；需要单独接入并验证。
 - 顶层文本中的公式可识别，普通代码按代码保留；未标记数学存在不可消除的歧义。附件、合并转发内部、卡片和自定义载荷不自动递归解析。
 - 在前置钩子之前就将公式删除或拆断的其他插件不属于已验证范围。当前本机智能分段插件只预先缓存切分结果；含公式原文被标记替换后其哈希不匹配，因此不会再切分这条回复。
-- 公式图片和文字是原序列内的有序组件；同一会话不同轮次的自动回复顺序仍由宿主调度。手动命令另有每会话串行锁。跨会话无共用原文缓冲区。
+- 含公式的完整回复渲染为单张图片；同一会话不同轮次的自动回复顺序仍由宿主调度。手动命令另有每会话串行锁。跨会话无共用原文缓冲区。
 - 真正逐片段向外发送的流式接口未接入；只有完整回复聚合后的片段边界测试。
 - 其他宿主版本、浏览器字体环境、实际 QQ/NapCat/SnowLuma 投递需重新验收，不扩大兼容声明。

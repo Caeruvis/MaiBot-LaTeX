@@ -1,116 +1,136 @@
 import asyncio
 import base64
 import struct
-from pathlib import Path
+
+import pytest
 
 from latex_engine.config import RenderConfig
-from latex_engine.render import Renderer
+from latex_engine.render import Renderer, text_to_latex
 
-VENDOR = Path(__file__).resolve().parents[1] / "vendor/katex"
-PNG = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8 + struct.pack(">II", 100, 60)).decode()
-
-
-class Capability:
-    def __init__(self):
-        self.calls = []
-        self.delay = 0
-        self.error = False
-
-    async def html2png(self, html, **kwargs):
-        self.calls.append((html, kwargs))
-        await asyncio.sleep(self.delay)
-        if self.error:
-            raise RuntimeError("private source and /private/path")
-        return {"image_base64": PNG, "mime_type": "image/png"}
+PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + struct.pack(">II", 100, 80)
 
 
-def test_render_uses_no_network_and_caches_by_source_mode_and_config():
-    async def run():
-        cap = Capability()
-        renderer = Renderer(cap, RenderConfig(), VENDOR)
-        assert await renderer.render("x", True) == PNG
-        assert await renderer.render("x", True) == PNG
-        assert len(cap.calls) == 1
-        await renderer.render("x", False)
-        await renderer.render("y", True)
-        renderer.config = RenderConfig(font_size=32)
-        await renderer.render("x", True)
-        assert len(cap.calls) == 4
-        assert all(kw["allow_network"] is False for _, kw in cap.calls)
+@pytest.mark.asyncio
+async def test_xelatex_document_and_cache(monkeypatch):
+    renderer = Renderer(RenderConfig())
+    requests = []
 
-    asyncio.run(run())
+    async def compile_document(document, width, height):
+        requests.append(document.decode())
+        assert (width, height) == (3200, 2400)
+        return PNG
 
-
-def test_failures_do_not_return_error_or_source():
-    async def run():
-        cap = Capability()
-        cap.error = True
-        assert await Renderer(cap, RenderConfig(), VENDOR).render("private") is None
-
-    asyncio.run(run())
+    monkeypatch.setattr(renderer, "_compile", compile_document)
+    source = text_to_latex(r"价格 $5，命令 \input{file}。") + r"\[\qty{2}{\meter}\]"
+    assert await renderer.render_body(source) == base64.b64encode(PNG).decode()
+    assert await renderer.render_body(source) == base64.b64encode(PNG).decode()
+    assert len(requests) == 1
+    assert r"\textbackslash{}input\{file\}" in requests[0]
+    assert r"价格 \$5" in requests[0]
+    assert r"\qty{2}{\meter}" in requests[0]
 
 
-def test_timeout_includes_queue():
-    async def run():
-        cap = Capability()
-        cap.delay = 2
-        renderer = Renderer(cap, RenderConfig(timeout_seconds=1, concurrency=1), VENDOR)
-        start = asyncio.get_running_loop().time()
-        results = await asyncio.gather(*(renderer.render(str(i)) for i in range(4)))
-        assert results == [None] * 4
-        assert asyncio.get_running_loop().time() - start < 1.5
-        assert len(cap.calls) == 1
+@pytest.mark.asyncio
+async def test_complete_document_bypasses_template(monkeypatch):
+    renderer = Renderer(RenderConfig())
+    source = r"\documentclass{standalone}\begin{document}x\end{document}"
 
-    asyncio.run(run())
+    async def compile_document(document, width, height):
+        assert document == source.encode()
+        return PNG
 
-
-def test_cancellation_propagates():
-    async def run():
-        cap = Capability()
-        cap.delay = 5
-        task = asyncio.create_task(Renderer(cap, RenderConfig(), VENDOR).render("x"))
-        await asyncio.sleep(0.02)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            return
-        assert False, "cancel swallowed"
-
-    asyncio.run(run())
+    monkeypatch.setattr(renderer, "_compile", compile_document)
+    assert await renderer.render_body(source, full_document=True)
 
 
-def test_missing_dependency_and_oversize_input_fail_safely(tmp_path):
-    async def run():
-        cap = Capability()
-        renderer = Renderer(cap, RenderConfig(), tmp_path)
-        assert await renderer.render("x") is None
-        assert await renderer.render("x" * 6001) is None
-        assert not cap.calls
+@pytest.mark.parametrize("binary", [b"bad", PNG[:16] + struct.pack(">II", 3201, 80)])
+@pytest.mark.asyncio
+async def test_rejects_invalid_png(monkeypatch, binary):
+    renderer = Renderer(RenderConfig())
 
-    asyncio.run(run())
+    async def compile_document(*args):
+        return binary
 
-
-def test_assets_are_offline_and_formula_is_data():
-    html = Renderer(None, RenderConfig(), VENDOR).build_html(r"\text{</script><img src=x>}", True)
-    assert "<img src=x>" not in html
-    assert "fonts/KaTeX_" not in html
-    assert "data:font/woff2;base64," in html
-    assert "throwOnError: true" in html
-    assert "throw new Error('untrusted')" in html
+    monkeypatch.setattr(renderer, "_compile", compile_document)
+    assert await renderer.render_body("x") is None
 
 
-def test_lru_and_ttl():
-    async def run():
-        cap = Capability()
-        renderer = Renderer(cap, RenderConfig(cache_entries=1), VENDOR)
-        await renderer.render("a")
-        await renderer.render("b")
-        await renderer.render("a")
-        assert len(cap.calls) == 3
-        for k, (_, v) in list(renderer._cache.items()):
-            renderer._cache[k] = (0, v)
-        renderer.prune()
-        assert not renderer._cache and renderer._cache_bytes == 0
+@pytest.mark.asyncio
+async def test_timeout_includes_queue(monkeypatch):
+    renderer = Renderer(RenderConfig(concurrency=1, timeout_seconds=1))
 
-    asyncio.run(run())
+    async def compile_document(*args):
+        pytest.fail("queued render must not start")
+
+    monkeypatch.setattr(renderer, "_compile", compile_document)
+    async with renderer._slots:
+        assert await renderer.render_body("x") is None
+
+
+@pytest.mark.asyncio
+async def test_cancellation_propagates(monkeypatch):
+    renderer = Renderer(RenderConfig())
+    started = asyncio.Event()
+
+    async def compile_document(*args):
+        started.set()
+        await asyncio.Future()
+
+    monkeypatch.setattr(renderer, "_compile", compile_document)
+    task = asyncio.create_task(renderer.render_body("x"))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not renderer._cache
+
+
+@pytest.mark.asyncio
+async def test_missing_docker_and_invalid_unicode_fail_safely(monkeypatch):
+    renderer = Renderer(RenderConfig())
+
+    async def unavailable(*args, **kwargs):
+        raise FileNotFoundError("docker")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unavailable)
+    assert await renderer.render_body("x") is None
+    assert await renderer.render_body(chr(0xD800)) is None
+
+
+@pytest.mark.asyncio
+async def test_docker_run_is_isolated_and_does_not_pull(monkeypatch):
+    renderer = Renderer(RenderConfig())
+    writes = []
+
+    class Process:
+        returncode = 0
+
+        class stdin:
+            write = writes.append
+
+            @staticmethod
+            async def drain():
+                pass
+
+            @staticmethod
+            def close():
+                pass
+
+        class stdout:
+            @staticmethod
+            async def readexactly(size):
+                raise asyncio.IncompleteReadError(PNG, size)
+
+        async def wait(self):
+            return self.returncode
+
+    async def start(*args, **kwargs):
+        assert args[:2] == ("docker", "run")
+        assert {"--network=none", "--read-only", "--cap-drop=ALL", "--pull=never"} <= set(args)
+        assert not any(arg.startswith(("-v", "--volume", "--mount")) for arg in args[2:])
+        assert "formula" not in " ".join(args)
+        return Process()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", start)
+    assert await renderer._compile(b"formula", 3200, 2400) == PNG
+    assert writes == [b"formula"]

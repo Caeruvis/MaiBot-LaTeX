@@ -51,7 +51,12 @@ def message(text):
 def test_real_sdk_registration():
     plugin = make_plugin()
     components = {c["name"]: c for c in plugin.get_components()}
-    assert set(components) == {"latex", "protect_formulas", "render_and_guard"}
+    assert set(components) == {
+        "latex",
+        "protect_formulas",
+        "render_and_guard",
+        "render_latex_reply",
+    }
     meta = components["render_and_guard"]["metadata"]
     assert (
         meta["error_policy"] == "abort" and meta["mode"] == "blocking" and meta["order"] == "late"
@@ -95,8 +100,8 @@ def test_complete_hook_path_and_receipts():
             reply_message_id="origin",
         )
         safe = final["modified_kwargs"]["message"]
-        assert [s["type"] for s in safe["raw_message"]] == ["text", "image", "text"]
-        assert safe["processed_plain_text"] == "说明 [公式图片]。"
+        assert [s["type"] for s in safe["raw_message"]] == ["image"]
+        assert safe["processed_plain_text"] == "[公式图片]"
         assert verified([final["custom_result"]], "send", safe)
         assert final["modified_kwargs"]["reply_message_id"] == "origin"
         assert plugin.ctx.send.calls == []
@@ -131,10 +136,39 @@ def test_formula_source_does_not_reach_send_text(reply, source, render_fails):
         outgoing = final["modified_kwargs"]["message"]
         assert source not in outgoing["processed_plain_text"]
         assert all(source not in seg["data"] for seg in outgoing["raw_message"])
-        assert renderer.calls == [source]
+        assert len(renderer.calls) == 1 and source in renderer.calls[0]
         assert outgoing["is_picture"] is not render_fails
 
     asyncio.run(run())
+
+
+@pytest.mark.asyncio
+async def test_tool_renders_once_and_only_same_session_can_send_image():
+    renderer = FakeRenderer()
+    plugin = make_plugin(renderer=renderer)
+    result = await plugin.render_latex_reply(source="先看 $x^2=4$，然后看 $x=2$。", stream_id="s1")
+    token = result["image_token"]
+    assert result["success"] and len(renderer.calls) == 1
+    assert await plugin.engine.transform([{"type": "text", "data": token}], "s2") == [
+        {"type": "text", "data": "（公式暂时无法显示）"}
+    ]
+    early = await plugin.protect_formulas(
+        response=token,
+        session_id="s1",
+        skip_post_process=False,
+        enable_splitter=True,
+        enable_chinese_typo=True,
+    )
+    final = await plugin.render_and_guard(message=message(early["modified_kwargs"]["response"]))
+    assert [seg["type"] for seg in final["modified_kwargs"]["message"]["raw_message"]] == ["image"]
+    assert len(renderer.calls) == 1 and plugin.ctx.send.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tool_failure_does_not_return_source():
+    plugin = make_plugin(renderer=FakeRenderer(fail=True))
+    result = await plugin.render_latex_reply(source="$private$", stream_id="s1")
+    assert result == {"success": False, "error": "（公式暂时无法显示）"}
 
 
 def test_plain_messages_preserve_content():
@@ -183,8 +217,8 @@ def test_same_session_commands_do_not_reorder_and_other_session_is_independent()
             plugin.latex_command(stream_id="s2", matched_groups={"source": "c"}),
         )
         assert [segs[0]["content"] for stream, segs in plugin.ctx.send.calls if stream == "s1"] == [
-            "png:a",
-            "png:b",
+            "png:\n\\[\na\n\\]\n",
+            "png:\n\\[\nb\n\\]\n",
         ]
         assert plugin.ctx.send.calls[0][0] == "s2"
         assert not plugin._command_locks

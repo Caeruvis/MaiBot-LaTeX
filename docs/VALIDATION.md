@@ -1,4 +1,8 @@
-## 验证结论
+## 历史验证记录
+
+本页下方记录旧 KaTeX 实现的验证。当前 TeX Live 后端的复现命令见 [README](../README.md#本地验证)。
+
+### 验证结论
 
 验证日期：**2026-11-05（Asia/Shanghai）** 。**70 项自动化测试通过，13 个真实浏览器场景通过，代码静态检查通过。** 原始结果保留在 [pytest XML](pytest-results.xml) 和 [浏览器渲染 JSON](render-report.json)。
 

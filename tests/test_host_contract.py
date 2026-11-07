@@ -180,7 +180,7 @@ def test_actual_send_hook_stops_bad_or_missing_transform(patched, monkeypatch, m
         )
         assert result.aborted == (mode != "ok")
         if not result.aborted:
-            assert outgoing["raw_message"][1]["type"] == "image"
+            assert [seg["type"] for seg in outgoing["raw_message"]] == ["image"]
             assert "secret" not in outgoing["processed_plain_text"]
 
     asyncio.run(run())

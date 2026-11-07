@@ -12,10 +12,10 @@ class FakeRenderer:
         self.fail = fail
         self.calls = []
 
-    async def render(self, source, display=True):
-        self.calls.append(source)
-        await asyncio.sleep(0.005 if source == "a" else 0)
-        return None if self.fail else "png:" + source
+    async def render_body(self, body, *, full_document=False):
+        self.calls.append(body)
+        await asyncio.sleep(0.005 if body == "\n\\[\na\n\\]\n" else 0)
+        return None if self.fail else "png:" + body
 
     def prune(self):
         pass
@@ -24,27 +24,25 @@ class FakeRenderer:
         pass
 
 
-def test_order_is_preserved_with_concurrent_rendering():
+def test_full_reply_becomes_one_image():
     async def run():
-        engine = Engine(FakeRenderer())
-        text, _ = engine.protect("前 $a$ 中 $b$ 后", "chat1")
-        assert "$" not in text and "a" not in text.replace("MLTX", "").split("⟦")[0]
+        renderer = FakeRenderer()
+        engine = Engine(renderer)
+        text, changed = engine.protect("前 $a$ 中 $b$ 后", "chat1")
+        assert changed and text.startswith("⟦MLTX:")
         out = await engine.transform([{"type": "text", "data": text}], "chat1")
-        assert [s["type"] for s in out] == ["text", "image", "text", "image", "text"]
-        assert [s.get("binary_data_base64") for s in out if s["type"] == "image"] == [
-            "png:a",
-            "png:b",
-        ]
+        assert [s["type"] for s in out] == ["image"]
+        assert renderer.calls == ["前 \\(a\n\\) 中 \\(b\n\\) 后"]
 
     asyncio.run(run())
 
 
-def test_failure_keeps_prose_and_never_source():
+def test_failure_never_falls_back_to_formula_source():
     async def run():
         engine = Engine(FakeRenderer(fail=True))
         text, _ = engine.protect(r"前 $\unknown{secret}$ 后", "chat")
         out = await engine.transform([{"type": "text", "data": text}], "chat")
-        assert "".join(s["data"] for s in out) == "前 " + FAILURE + " 后"
+        assert out == [{"type": "text", "data": FAILURE}]
 
     asyncio.run(run())
 
@@ -60,9 +58,10 @@ def test_tokens_cannot_cross_sessions_or_survive_expiry():
     asyncio.run(run())
 
 
-def test_adjacent_text_segments_are_joined():
+def test_adjacent_text_segments_are_joined_and_attachment_is_preserved():
     async def run():
-        out = await Engine(FakeRenderer()).transform(
+        renderer = FakeRenderer()
+        out = await Engine(renderer).transform(
             [
                 {"type": "text", "data": "前 $x"},
                 {"type": "text", "data": "^2$ 后"},
@@ -70,7 +69,8 @@ def test_adjacent_text_segments_are_joined():
             ],
             "a",
         )
-        assert out[1]["binary_data_base64"] == "png:x^2"
+        assert out[0]["type"] == "image"
+        assert renderer.calls == ["前 \\(x^2\n\\) 后"]
         assert out[-1]["type"] == "at"
 
     asyncio.run(run())
@@ -79,7 +79,7 @@ def test_adjacent_text_segments_are_joined():
 def test_auto_disabled_manual_still_renders():
     async def run():
         engine = Engine(FakeRenderer(), automatic=False)
-        assert engine.protect("说明 $x$", "a")[0] == "说明 " + FAILURE
+        assert engine.protect("说明 $x$", "a")[0] == FAILURE
         assert (await engine.command(r"\frac{1}{2}"))[0]["type"] == "image"
 
     asyncio.run(run())
@@ -100,8 +100,7 @@ def test_formula_limit_and_pending_bound():
     async def run():
         engine = Engine(FakeRenderer())
         out = await engine.transform([{"type": "text", "data": "$x$ " * 20}], "a")
-        assert sum(s["type"] == "image" for s in out) == 12
-        assert sum(s.get("data") == FAILURE for s in out) == 8
+        assert out == [{"type": "text", "data": FAILURE}]
         for _ in range(520):
             engine.protect("$x$", "a")
         assert len(engine.pending) == 512

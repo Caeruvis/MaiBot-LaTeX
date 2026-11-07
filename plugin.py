@@ -6,9 +6,8 @@ import time
 from collections import OrderedDict
 from contextlib import suppress
 from copy import deepcopy
-from pathlib import Path
 
-from maibot_sdk import Command, HookHandler, MaiBotPlugin
+from maibot_sdk import Command, HookHandler, MaiBotPlugin, Tool
 from maibot_sdk.types import ErrorPolicy, HookOrder
 
 from .latex_engine.config import LatexConfig
@@ -41,7 +40,7 @@ class LatexPlugin(MaiBotPlugin):
         if self.engine is not None:
             self.engine.clear()
         self.engine = Engine(
-            Renderer(self.ctx.render, settings.render, Path(__file__).parent / "vendor/katex"),
+            Renderer(settings.render),
             automatic=settings.plugin.auto_render,
         )
 
@@ -67,7 +66,7 @@ class LatexPlugin(MaiBotPlugin):
     @HookHandler(
         "maisaka.reply.before_post_process",
         name="protect_formulas",
-        description="完整回复拆分前隐藏公式源码",
+        description="拆分前保护含公式的完整回复",
         order=HookOrder.LATE,
         timeout_ms=2000,
         error_policy=ErrorPolicy.ABORT,
@@ -101,7 +100,7 @@ class LatexPlugin(MaiBotPlugin):
     @HookHandler(
         "send_service.before_send",
         name="render_and_guard",
-        description="平台发送前将公式换成图片并校验保护回执",
+        description="发送前将含公式的回复换成单张图片",
         order=HookOrder.LATE,
         timeout_ms=15000,
         error_policy=ErrorPolicy.ABORT,
@@ -130,6 +129,37 @@ class LatexPlugin(MaiBotPlugin):
             "action": "continue",
             "modified_kwargs": updated,
             "custom_result": receipt("send", message),
+        }
+
+    @Tool(
+        "render_latex_reply",
+        description=(
+            "当最终回复需要 LaTeX 公式或图表时，调用一次并提供整段回复，包含全部解释和公式。"
+            "工具生成单张图片。成功后，用正常回复流程仅原样输出工具给出的 image_token。"
+        ),
+        parameters={
+            "source": {"type": "string", "description": "整段回复正文", "required": True},
+            "format": {
+                "type": "string",
+                "enum": ["mixed", "latex"],
+                "description": "mixed 为普通文字与带分隔符的公式；latex 为 LaTeX 正文或完整文档",
+                "required": False,
+                "default": "mixed",
+            },
+        },
+        timeout_ms=13000,
+    )
+    async def render_latex_reply(self, source="", format="mixed", **kwargs):
+        stream = kwargs.get("stream_id")
+        if not isinstance(stream, str):
+            return {"success": False, "error": FAILURE}
+        token = await self.engine.tool(source, format, stream)
+        if not token:
+            return {"success": False, "error": FAILURE}
+        return {
+            "success": True,
+            "content": "已生成整段回复的图片。请在正常回复中只原样输出：" + token,
+            "image_token": token,
         }
 
     @Command(

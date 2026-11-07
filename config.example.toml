@@ -1,9 +1,10 @@
 [plugin]
 config_version = "0.1.0"
-# 关闭自动图片时，自动回复的公式仍替换为安全提示；/latex 始终可调用。
+# 关闭自动图片时，含公式的自动回复使用失败提示。模型工具和 /latex 仍可用。
 auto_render = true
 
 [render]
+docker_image = "maibot-latex-texlive:local"
 font_size = 28
 foreground = "#18202b"
 background = "#ffffff"

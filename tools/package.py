@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-INCLUDED_DIRS = ("latex_engine", "vendor", "docs", "tests", "tools")
+INCLUDED_DIRS = ("latex_engine", "texlive", "docs", "tests", "tools")
 INCLUDED_FILES = (
     "plugin.py",
     "_manifest.json",
