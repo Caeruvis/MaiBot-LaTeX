@@ -1,12 +1,13 @@
 import asyncio
 from types import SimpleNamespace
 
+from latex_engine.config import RenderConfig
 from latex_engine.engine import Engine
 from latex_engine.parser import FAILURE
 
 
 class FakeRenderer:
-    config = SimpleNamespace(max_chars=6000, max_formulas=12)
+    config = SimpleNamespace(max_chars=6000)
 
     def __init__(self, fail=False):
         self.fail = fail
@@ -96,13 +97,23 @@ def test_reentry_is_idempotent_and_has_no_send_side_effect():
     asyncio.run(run())
 
 
-def test_formula_limit_and_pending_bound():
+def test_many_inline_formulas_render_once_with_legacy_config():
     async def run():
-        engine = Engine(FakeRenderer())
-        out = await engine.transform([{"type": "text", "data": "$x$ " * 20}], "a")
-        assert out == [{"type": "text", "data": FAILURE}]
-        for _ in range(520):
-            engine.protect("$x$", "a")
-        assert len(engine.pending) == 512
+        renderer = FakeRenderer()
+        renderer.config = RenderConfig(max_formulas=12)
+        engine = Engine(renderer)
+        source = "设 " + "、".join(f"$a_{i}$" for i in range(20))
+        token = await engine.tool(source, "mixed", "a")
+        assert token
+        out = await engine.transform([{"type": "text", "data": token}], "a")
+        assert [segment["type"] for segment in out] == ["image"]
+        assert len(renderer.calls) == 1 and renderer.calls[0].count(r"\(") == 20
 
     asyncio.run(run())
+
+
+def test_pending_bound():
+    engine = Engine(FakeRenderer())
+    for _ in range(520):
+        engine.protect("$x$", "a")
+    assert len(engine.pending) == 512

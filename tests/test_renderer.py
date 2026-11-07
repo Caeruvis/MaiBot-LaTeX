@@ -8,9 +8,14 @@ import pytest
 
 from latex_engine import render, texlive
 from latex_engine.config import RenderConfig
-from latex_engine.render import Renderer, text_to_latex
+from latex_engine.render import Renderer, math_to_latex, text_to_latex
 
 PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + struct.pack(">II", 100, 80)
+
+
+def test_display_math_trims_boundary_lines_and_keeps_comment_terminated():
+    source = "\n  \n" + r"\frac{1}{2} % trailing comment" + "\n \n"
+    assert math_to_latex(source, True) == "\n\\[\n\\frac{1}{2} % trailing comment\n\\]\n"
 
 
 @pytest.mark.asyncio

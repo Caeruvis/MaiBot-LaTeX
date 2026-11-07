@@ -74,10 +74,8 @@ class Engine:
 
     def _page(self, spans: list[Span]) -> Page | None:
         formulas = [span for span in spans if span.kind == "math"]
-        if (
-            any(span.kind not in {"text", "math"} for span in spans)
-            or len(formulas) > self.renderer.config.max_formulas
-            or any(len(span.content) > self.renderer.config.max_chars for span in formulas)
+        if any(span.kind not in {"text", "math"} for span in spans) or any(
+            len(span.content) > self.renderer.config.max_chars for span in formulas
         ):
             return None
         if len(formulas) == 1 and _DOCUMENT.match(formulas[0].content):

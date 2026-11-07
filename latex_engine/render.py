@@ -36,6 +36,7 @@ def text_to_latex(text: str) -> str:
 
 
 def math_to_latex(source: str, display: bool) -> str:
+    source = source.strip()
     # 分隔符前保留换行，避免末尾 TeX 注释吞掉闭合符。
     if display:
         return "\n\\[\n" + source + "\n\\]\n"

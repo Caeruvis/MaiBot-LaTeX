@@ -12,7 +12,6 @@ scale = 2.0
 max_width = 1600
 max_height = 1200
 max_chars = 6000
-max_formulas = 12
 concurrency = 2
 timeout_seconds = 8.0
 cache_entries = 128

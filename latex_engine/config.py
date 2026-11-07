@@ -24,7 +24,6 @@ class RenderConfig(PluginConfigBase):
     )
     max_height: int = Field(default=1200, ge=100, le=2400, description="最大排版高度")
     max_chars: int = Field(default=6000, ge=100, le=12000, description="单个公式最多字符")
-    max_formulas: int = Field(default=12, ge=1, le=32, description="每条消息最多渲染公式数")
     concurrency: int = Field(default=2, ge=1, le=4, description="同时渲染的公式数")
     timeout_seconds: float = Field(default=8.0, ge=1.0, le=10.0, description="含排队的单张图片超时")
     cache_entries: int = Field(default=128, ge=0, le=512, description="内存图片缓存上限")

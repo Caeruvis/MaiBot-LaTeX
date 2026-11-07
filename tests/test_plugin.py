@@ -120,6 +120,8 @@ def test_complete_hook_path_and_receipts():
 )
 @pytest.mark.parametrize("render_fails", [False, True])
 def test_formula_source_does_not_reach_send_text(reply, source, render_fails):
+    source = source.strip()
+
     async def run():
         renderer = FakeRenderer(fail=render_fails)
         plugin = make_plugin(renderer=renderer)
