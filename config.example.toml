@@ -1,0 +1,19 @@
+[plugin]
+config_version = "0.1.0"
+# 关闭自动图片时，自动回复的公式仍替换为安全提示；/latex 始终可调用。
+auto_render = true
+
+[render]
+font_size = 28
+foreground = "#18202b"
+background = "#ffffff"
+padding = 16
+scale = 2.0
+max_width = 1600
+max_height = 1200
+max_chars = 6000
+max_formulas = 12
+concurrency = 2
+timeout_seconds = 8.0
+cache_entries = 128
+cache_seconds = 900

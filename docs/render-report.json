@@ -1,0 +1,104 @@
+{
+  "backend": "actual Chromium + extracted Host 1.3.19 capture methods",
+  "network_requests": [],
+  "cases": {
+    "fraction": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        228,
+        204
+      ]
+    },
+    "powers": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        340,
+        152
+      ]
+    },
+    "radical": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        344,
+        152
+      ]
+    },
+    "integral": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        466,
+        232
+      ]
+    },
+    "matrix": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        304,
+        228
+      ]
+    },
+    "aligned": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        346,
+        268
+      ]
+    },
+    "inline": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        326,
+        152
+      ]
+    },
+    "unknown": {
+      "expected_image": false,
+      "got_image": false,
+      "passed": true
+    },
+    "untrusted": {
+      "expected_image": false,
+      "got_image": false,
+      "passed": true
+    },
+    "macro_recursion": {
+      "expected_image": false,
+      "got_image": false,
+      "passed": true
+    },
+    "oversize": {
+      "expected_image": false,
+      "got_image": false,
+      "passed": true
+    },
+    "html_injection": {
+      "expected_image": true,
+      "got_image": true,
+      "passed": true,
+      "size": [
+        1362,
+        146
+      ]
+    },
+    "document": {
+      "expected_image": false,
+      "got_image": false,
+      "passed": true
+    }
+  },
+  "passed": true
+}

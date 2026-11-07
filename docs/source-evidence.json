@@ -1,0 +1,29 @@
+{
+  "verified_date": "2026-11-05",
+  "host_version": "1.3.19",
+  "sdk_version": "2.21.0",
+  "host_path": "/Users/yangzheren/Documents/ChatGPT/dsh-video-storyboard-maibot-plugin-adapt/work/host",
+  "sdk_path": "/Users/yangzheren/Documents/ChatGPT/dsh-video-storyboard-maibot-plugin-adapt/work/maibot-plugin-sdk-main",
+  "host": {
+    "pyproject.toml": "a89358d05e983975583cc927cc4b201e39c9b879ab7f9328e1f1c58daffdfbda",
+    "src/maisaka/builtin_tool/reply.py": "3a78fb8756f027163f9b83b91a60519f7eba8c7ef1f4d2c724a4cfdbd7216251",
+    "src/maisaka/chat_loop_service.py": "1006d04ca4e9832e0467b85641881dd3a4ec17899df7b28d4e1c85d6669d5942",
+    "src/maisaka/builtin_tool/context.py": "f970768103eadf3c0ded8fc5f5292a03f2a2329b8155e39b6f35db48643bdb16",
+    "src/services/send_service.py": "383bd356b6487e1cb3627c73e492d54680e1648d306120f0264d7202053f774d",
+    "src/services/html_render_service.py": "5877240300f57d4a16c31fac1892d6e1bf2e20e3c87a1b02c8776e40ff637616",
+    "src/plugin_runtime/host/hook_dispatcher.py": "f84989f1c6853c718221c4700f927b12bb48436b8d1e6dc436a0c63ed272d6a6",
+    "src/plugin_runtime/host/message_utils.py": "753a357d0a0d412a0a0b55098e882a00d8d8c1cea2a980ca3f782ac61b1bde7e",
+    "src/plugin_runtime/runner/manifest_validator.py": "bd72b75fef10063b6386eff964738adec6a83e078382d755ab2f215792f53def",
+    "src/plugin_runtime/runner/plugin_loader.py": "bd86638e00f9c4aba8873e658aee7362be0df02d07f01b3e4730b8f4b929a374",
+    "src/plugin_runtime/capabilities/core.py": "4ceb185e9d5e110de22c9665c6db75eb0e19123651ff503c352fae30d9c1fef8",
+    "src/chat/message_receive/bot.py": "a425a315b816614636230b499a5a231554e4e73c6fbc8578d60715bb28330276",
+    "src/common/data_models/message_component_data_model.py": "e4dffbe1d4bb9356ad002648d439bf01edb76e23d49ca4b07ad6c8ed22585323"
+  },
+  "sdk": {
+    "pyproject.toml": "1dc68505256c9167dd3731f17c7adc00b48d3cff25b8aef9312f6f8a0180093f",
+    "maibot_sdk/plugin.py": "192bde8cdb1d0718bb623239497022d914603c451e6b1bffa2e77cc18dc93956",
+    "maibot_sdk/components.py": "9935ff03cba06a0ccd160f16a0392d6110a830c7af21ae74ec16e217636d84f6",
+    "maibot_sdk/capabilities/send.py": "b18d51f0f446a7a1716c747275ec26456abcac875756d66905390d4f640f38fd",
+    "maibot_sdk/capabilities/render.py": "72ef6529469af64f5598e1d5042939b1a2b4a757196208bd747590223d359d8d"
+  }
+}

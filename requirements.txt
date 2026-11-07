@@ -1,0 +1,2 @@
+# 插件运行于 Host 管理的 Runner；渲染复用 Host 的浏览器能力。
+maibot-plugin-sdk==2.21.0

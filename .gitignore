@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+/.venv/
+
+# Local editor and OS files
+/.idea/
+.DS_Store
+
+# Local configuration and generated output
+/config.toml
+/.env
+/.env.*
+!/.env.example
+/work/
+/outputs/
+
+# 项目排除路径
+/vendor/katex/dist/

@@ -1,0 +1,81 @@
+--- a/src/maisaka/builtin_tool/reply.py
++++ b/src/maisaka/builtin_tool/reply.py
+@@ -99,7 +99,20 @@
+         reply_tool_args=dict(reply_tool_args),
+         **post_process_options,
+     )
++    # Caeruvis LaTeX strict guard: 缺少有效处理回执时停止本次回复。
++    from src.services.latex_guard import verified
++
+     before_post_process_kwargs = before_post_process_result.kwargs
++    protected_value = {
++        key: before_post_process_kwargs.get(key)
++        for key in ("response", "skip_post_process", "enable_splitter", "enable_chinese_typo")
++    }
++    if (
++        before_post_process_result.errors
++        or before_post_process_result.aborted
++        or not verified(before_post_process_result.custom_results, "reply", protected_value)
++    ):
++        return "", post_process_options
+     if "response" in before_post_process_kwargs:
+         reply_text = str(before_post_process_kwargs["response"] or "").strip()
+     for option_name in post_process_options:
+@@ -577,7 +590,8 @@
+             reply_tool_args,
+         )
+     except Exception as exc:
+-        logger.warning(f"{tool_ctx.runtime.log_prefix} 回复文本后处理前 Hook 调用失败，将使用默认策略: {exc}")
++        logger.warning("回复公式保护不可用，已停止本次回复")
++        reply_text = ""
+         post_process_options = {
+             "skip_post_process": False,
+             "enable_splitter": True,
+--- a/src/services/send_service.py
++++ b/src/services/send_service.py
+@@ -245,11 +245,21 @@
+     )
+     mutated_message = message
+     raw_message = hook_result.kwargs.get("message")
++    if hook_name == "send_service.before_send":
++        from src.services.latex_guard import verified
++
++        if hook_result.errors or not verified(hook_result.custom_results, "send", raw_message):
++            hook_result.aborted = True
++            return hook_result, message
+     if raw_message is not None:
+         try:
+             mutated_message = deserialize_session_message(raw_message)
+         except Exception as exc:
+-            logger.warning(f"Hook {hook_name} 返回的 message 无法反序列化，已忽略: {exc}")
++            if hook_name == "send_service.before_send":
++                hook_result.aborted = True
++                logger.warning("公式保护后的消息无效，已停止发送")
++            else:
++                logger.warning("Hook 消息无效，已保留原消息")
+     return hook_result, mutated_message
+ 
+ 
+--- /dev/null
++++ b/src/services/latex_guard.py
+@@ -0,0 +1,20 @@
++"""与配套 Host 补丁共用的回执协议，不依赖 SDK。"""
++
++import hashlib
++import json
++
++GUARD_KEY = "caeruvis_latex_guard_v1"
++
++
++def fingerprint(value: object) -> str:
++    encoded = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
++    return hashlib.sha256(encoded.encode()).hexdigest()
++
++
++def receipt(stage: str, value: object) -> dict:
++    return {GUARD_KEY: stage, "sha256": fingerprint(value)}
++
++
++def verified(receipts: list, stage: str, value: object) -> bool:
++    expected = receipt(stage, value)
++    return any(item == expected for item in receipts)
