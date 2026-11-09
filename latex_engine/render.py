@@ -3,13 +3,14 @@
 import asyncio
 import base64
 import hashlib
+import math
 import struct
 import time
 from collections import OrderedDict
 
 from .config import RenderConfig
 from .parser import MAX_TEXT
-from .texlive import compile_png
+from .texlive import HorizontalOverflow, compile_png
 
 MAX_IMAGE_BYTES = 2_000_000
 MAX_CACHE_BYTES = 24_000_000
@@ -61,10 +62,10 @@ class Renderer:
                 del self._cache[key]
                 self._cache_bytes -= len(value)
 
-    def _document(self, body: str) -> str:
+    def _document(self, body: str, layout_width: int) -> str:
         config = self.config
         border = config.padding * 0.75
-        width = min(640, config.max_width - 2 * config.padding) * 0.75
+        width = layout_width * 0.75
         size = config.font_size * 0.75
         return (
             rf"\documentclass[border={border}bp,varwidth={width}bp]{{standalone}}" + "\n"
@@ -89,8 +90,10 @@ class Renderer:
     async def render_body(self, source: str, *, full_document: bool = False) -> str | None:
         if not source.strip():
             return None
+        max_layout_width = self.config.max_width - 2 * self.config.padding
+        layout_width = min(640, max_layout_width)
         try:
-            document = (source if full_document else self._document(source)).encode()
+            document = (source if full_document else self._document(source, layout_width)).encode()
         except UnicodeEncodeError:
             return None
         if len(document) > MAX_DOCUMENT_BYTES:
@@ -106,8 +109,20 @@ class Renderer:
         try:
             async with asyncio.timeout(self.config.timeout_seconds):
                 async with self._slots:
-                    binary = await self._compile(document, width, height)
-        except (OSError, TimeoutError):
+                    try:
+                        binary = await self._compile(document, width, height)
+                    except HorizontalOverflow as overflow:
+                        if full_document or layout_width == max_layout_width:
+                            return None
+                        # TeX 用 pt 报告超宽，按约 0.75 pt/px 换算并留一像素余量。
+                        retry_width = math.ceil(
+                            min(max_layout_width, layout_width + overflow.points / 0.75 + 1)
+                        )
+                        wider = self._document(source, retry_width).encode()
+                        if len(wider) > MAX_DOCUMENT_BYTES:
+                            return None
+                        binary = await self._compile(wider, width, height)
+        except (OSError, TimeoutError, HorizontalOverflow):
             return None
         if (
             not 24 <= len(binary) <= MAX_IMAGE_BYTES

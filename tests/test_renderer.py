@@ -38,6 +38,60 @@ async def test_xelatex_document_and_cache(monkeypatch):
     assert r"\qty{2}{\meter}" in requests[0]
 
 
+@pytest.mark.parametrize(("overflow_points", "retry_width"), [(18.49149, 499.5), (1000, 1176.0)])
+@pytest.mark.asyncio
+async def test_horizontal_overflow_retries_within_width_limit_and_caches(
+    monkeypatch, overflow_points, retry_width
+):
+    renderer = Renderer(RenderConfig())
+    requests = []
+
+    async def compile_document(document, width, height):
+        assert (width, height) == (3200, 2400)
+        requests.append(document.decode())
+        if len(requests) == 1:
+            raise texlive.HorizontalOverflow(overflow_points)
+        return PNG
+
+    monkeypatch.setattr(renderer, "_compile", compile_document)
+    source = r"\[a=\sqrt{1-b^2},\qquad f(b)=(1+\sqrt{1-b^2})(b+2),\quad 0\le b\le1.\]"
+    expected = base64.b64encode(PNG).decode()
+    assert await renderer.render_body(source) == expected
+    assert await renderer.render_body(source) == expected
+    first, retry = requests
+    assert "varwidth=480.0bp" in first
+    assert retry == first.replace("varwidth=480.0bp", f"varwidth={retry_width}bp")
+
+
+@pytest.mark.parametrize(
+    ("max_width", "full_document", "overflow", "expected_calls"),
+    [
+        (1600, True, True, 1),
+        (672, False, True, 1),
+        (1600, False, False, 1),
+        (1600, False, True, 2),
+    ],
+    ids=["full-document", "at-width-limit", "other-failure", "retry-still-overflows"],
+)
+@pytest.mark.asyncio
+async def test_render_failure_stops_at_expected_attempt(
+    monkeypatch, max_width, full_document, overflow, expected_calls
+):
+    renderer = Renderer(RenderConfig(max_width=max_width))
+    requests = []
+
+    async def compile_document(document, width, height):
+        requests.append(document)
+        if overflow:
+            raise texlive.HorizontalOverflow(18.49149)
+        return b""
+
+    monkeypatch.setattr(renderer, "_compile", compile_document)
+    source = r"\documentclass{standalone}\begin{document}x\end{document}" if full_document else "x"
+    assert await renderer.render_body(source, full_document=full_document) is None
+    assert len(requests) == expected_calls
+
+
 @pytest.mark.asyncio
 async def test_complete_document_bypasses_template(monkeypatch):
     renderer = Renderer(RenderConfig())

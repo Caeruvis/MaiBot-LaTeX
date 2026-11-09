@@ -14,6 +14,14 @@ _PROFILE = Path(__file__).resolve().parents[1] / "texlive/macos.sb"
 _MAC_PATH = "/Library/TeX/texbin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 _LIMITS = 'ulimit -c 0 && ulimit -f 16384 && ulimit -t 10 && exec "$@"'
 _PAGE_SIZE = re.compile(rb"^Page size:\s*([\d.]+) x ([\d.]+) pts", re.MULTILINE)
+_OVERFULL_BOX = re.compile(rb"^Overfull .*box", re.MULTILINE)
+_HBOX_OVERFLOW = re.compile(rb"^Overfull \\hbox \(([0-9]+(?:\.[0-9]+)?)pt too wide\)", re.MULTILINE)
+
+
+class HorizontalOverflow(Exception):
+    def __init__(self, points: float):
+        super().__init__(points)
+        self.points = points
 
 
 def _executable(name: str, search_path: str) -> Path:
@@ -165,11 +173,14 @@ async def compile_png(document: bytes, dpi: int, width: int, height: int, limit:
         ):
             return b""
         log = work / "answer.log"
-        if (
-            log.is_symlink()
-            or not log.is_file()
-            or re.search(rb"(?m)^Overfull .*box", log.read_bytes())
-        ):
+        if log.is_symlink() or not log.is_file():
+            return b""
+        log_text = log.read_bytes()
+        overflow_count = len(_OVERFULL_BOX.findall(log_text))
+        if overflow_count:
+            horizontal = _HBOX_OVERFLOW.findall(log_text)
+            if len(horizontal) == overflow_count:
+                raise HorizontalOverflow(max(map(float, horizontal)))
             return b""
         if await job.run(job.driver, "-q", "-o", "answer.pdf", "answer.xdv") is None:
             return b""
