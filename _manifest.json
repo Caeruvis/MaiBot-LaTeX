@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "caeruvis.latex",
   "version": "0.1.2",
-  "name": "MaiBot LaTeX 公式渲染",
+  "name": "麦·LaTeX",
   "description": "用 TeX Live 将含公式的整段回复渲染成一张图片，支持模型工具和 /latex 命令。",
   "author": {"name": "Caeruvis", "url": "https://github.com/Caeruvis"},
   "license": "MIT",
